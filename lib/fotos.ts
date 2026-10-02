@@ -1,6 +1,6 @@
 const TIPOS = ["image/jpeg", "image/png", "image/webp"];
 const MAX_BYTES = 5 * 1024 * 1024;
-const LADO = 400;
+const LADO = 900;
 
 export function validarArquivoFoto(f: { type: string; size: number }): string | null {
   if (!TIPOS.includes(f.type)) return "Formato não suportado. Envie JPG, PNG ou WebP (fotos HEIC do iPhone: exporte como JPG).";
