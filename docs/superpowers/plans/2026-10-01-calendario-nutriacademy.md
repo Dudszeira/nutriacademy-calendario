@@ -3043,3 +3043,81 @@ Ele ainda tem aulas. Edite essas aulas para outro professor ou categoria, ou exc
 ```bash
 git add -A && git commit -m "docs: guia da equipe e ajustes de qualidade/segurança"
 ```
+
+---
+
+## Emenda 2026-10-02 — identidade visual, seções, imersões (prevalece sobre as tasks abaixo)
+
+Origem: spec §11, `PRODUCT.md` e os surface briefs em `.impeccable/surfaces/`. A referência visual aprovada é o código da prévia (scratchpad `previa-src.html`, publicada como artifact v4); os tokens e medidas de lá são a fonte. Antes de qualquer edição de UI, carregar `impeccable` e ler `reference/craft-floor.md`.
+
+**Renomeações globais:** `categorias` → `secoes`; `Categoria` → `Secao`; `categoria_id` → `secao_id`; `categoriaSchema` → `secaoSchema`; rotas `/admin/categorias` → `/admin/secoes`. O professor perde o `titulo`; a aula ganha `nomeExibicao`.
+
+### E1 (Task 4 — reabrir com TDD)
+- `aulaSchema`: acrescentar `descricao` (opcional, ≤ 600, vazio → null), `nomeExibicao` (opcional, ≤ 80, vazio → null), `secaoId` (uuid), `imersaoId` (uuid opcional, vazio → null), `numeroNaImersao` (inteiro 1–50, obrigatório se `imersaoId`, via `superRefine`), `imagemPath` (opcional, vazio → null). Remover `categoriaId`.
+- `professorSchema`: remover `titulo`.
+- `secaoSchema`: `{ nome 2–40, estilo: 'destaque'|'compacto', acento: 'ouro'|'teal', ordem: int 0–99, logoPath? }`.
+- `imersaoSchema`: `{ nome 3–80, secaoId uuid, exibirNome: boolean (checkbox "on" → true) }`.
+- `fotos.ts`: `LADO = 900`.
+- Testes novos: imersão sem número rejeita; número sem imersão é ignorado (vira null); descrição vazia vira null; estilo inválido rejeita.
+
+### E2 (Task 5 — migration `0001_inicial.sql` substituída antes de aplicar)
+Tabelas conforme spec §11.2: `secoes`, `imersoes`, `professores` (sem `titulo`) e `aulas` (com `descricao`, `nome_exibicao`, `secao_id`, `imersao_id`, `numero_na_imersao`, `imagem_path`). Mais:
+- `check ((imersao_id is null) = (numero_na_imersao is null))`;
+- `unique (imersao_id, numero_na_imersao)`.
+
+RLS idêntica (leitura pública, escrita só para `eh_equipe()`) em `secoes` e `imersoes`. `verificar-rls.ts` passa a usar `secoes`.
+
+### E3 (Task 6 — reabrir)
+- Tipos: `Secao { id; nome; estilo; acento; ordem; logoPath }`, `Imersao { id; nome; exibirNome; secaoId }`, `Professor { id; nome; slug; fotoPath }`, `Aula { …, descricao: string|null, nomeExibicao: string|null, secao: Secao, imersao: Imersao|null, numeroNaImersao: number|null, imagemPath: string|null }`.
+- `SELECT_AULA` com joins em `secoes` e `imersoes` (left join na imersão).
+- `nomeExibicao(aula)` → `aula.nomeExibicao ?? aula.professor.nome`. O professor sozinho é exibido pelo `nome`.
+- Novas consultas: `listarSecoes`, `secaoPorId`, `listarImersoes`, `imersaoPorId`, `ultimoNomeExibicao(sb, professorId)`, `contarAulas(sb, 'professor_id'|'secao_id'|'imersao_id', id)`.
+- Nova função pura testada `lib/montar-mes.ts`: `montarMes(aulas, secoes, imersoes) → Bloco[]`, com `Bloco = { secao, avulsas: Aula[], imersoes: { imersao, aulas: Aula[] }[] }`. Seções por `ordem`, avulsas por data, imersões após as avulsas da sua seção, aulas da imersão por número, blocos vazios omitidos. Teste TDD com os dados de outubro.
+
+### E4 (Task 7 — seed)
+`dados-setembro.json` → `dados-iniciais.json` com setembro e outubro/2026 exatamente como na página. Seções, com ordem e estilo:
+
+| Seção | Ordem | Estilo | Acento | Logo |
+|---|---|---|---|---|
+| NutriLabs | 10 | destaque | ouro | — |
+| NutriOnfire | 20 | destaque | ouro | — |
+| NutriAcademy PRO | 30 | compacto | teal | `logov4.png` |
+| Curadoria | 40 | destaque | ouro | — |
+| Certificação | 50 | destaque | ouro | — |
+
+A imersão "Imersão Samira Lima — outubro/2026" fica na NutriLabs, com `exibirNome = false`. O `nomeExibicao` é copiado do texto de cada card, inclusive "Profª. Fred Estevam" e "Profª. Guilherme Oliveira", sem correção por inferência; a equipe ajusta no painel. Imagem própria `Samira-Lima2-1.jpg` nas 5 aulas da imersão. Correção "Respitatórios" → "Respiratórios". Fotos em 900×900. Assets globais baixados para `public/marca/`: `logo-claro.webp`, `bg-01.jpg`.
+
+### E5 (Tasks 8–9 — UI pública, reescrita visual)
+Seguir o surface brief público e portar a prévia para componentes:
+- `components/publico/hero.tsx`: moldura dourada, `public/marca/bg-01.jpg` a 50%, logo, H1 e pílula. A `NavMes` em texto com separador vertical fica dentro do hero.
+- `card-destaque.tsx`: rótulo = "Aula 0N" ou nome da seção; descrição; imagem via `next/image` (`imagemPath ?? fotoPath`), sem filtro.
+- `card-compacto.tsx`: avatar de 57px, acento teal.
+- `moldura-imersao.tsx` e `selo-secao.tsx` (logo da seção compacta).
+- `rodape.tsx`: Curadoria · Módulo · Calendário {Mês}.
+- `pagina-do-mes.tsx`: usa `montarMes`.
+- Tokens no `globals.css`: `--na-ouro: #D8BB68`, `--na-ouro-pilula: #B68F42`, `--na-borda-ouro: #998858`, `--na-marrom: #31291F`, `--na-teal: #9DCCCC`, `--na-teal-forte: #178A8A`, `--na-vidro: rgba(10,10,10,.43)`, `--na-borda: #5E5E5E`. Fonte Poppins via `next/font` (400/500/600/700). O tema shadcn é mapeado para o escuro: `--background: #000`, `--primary: #D8BB68`, `--primary-foreground: #1A160C`, `--border: #3A352A`, `--radius: 15px`. `<html class="dark">`.
+- O E2E da Task 8 passa a esperar o H1 "Programação mês de setembro" (case-insensitive), "Realizada" e a nav "‹ …" em texto.
+
+### E6 (Tasks 10–13 — admin com shadcn, via MCP)
+Adicionar: `npx shadcn@latest add sidebar field calendar empty spinner toggle-group sheet switch textarea tooltip breadcrumb`.
+- Layout `(painel)`: `SidebarProvider` + `Sidebar` colapsável em ícone (Aulas, Imersões, Professores, Seções e "Ver calendário ↗"), seguindo o surface brief do admin.
+- Formulário de aula num `Sheet` lateral, com `Field`/`FieldLabel`/`FieldError` e data por `Calendar` em `Popover`. Campos:
+  - professor por combobox com avatar;
+  - "Como o nome aparece", pré-preenchido via `ultimoNomeExibicao`;
+  - seção por `ToggleGroup`;
+  - imersão + número;
+  - descrição em `Textarea`;
+  - imagem opcional, por upload.
+
+  O formulário inclui a **prévia ao vivo** do card público, reaproveitando `CardDestaque`/`CardCompacto`.
+- `Empty` para mês sem aulas; `Spinner` nos botões pendentes.
+- **Categorias** passam a ser **Seções** (estilo, acento, ordem e logo). Nova tela **Imersões**: lista, formulário e "Adicionar aula" com o número já preenchido.
+- **Duplicar** em aula de imersão: número + 1; nas demais, data + 7 dias.
+- Os E2E das Tasks 11–13 seguem os mesmos fluxos, com os nomes novos (Seção, Imersão).
+
+### E7 (Task 14 — fechamento Impeccable)
+Antes do deploy:
+1. Rodar `impeccable detect --json` nas rotas alteradas.
+2. Capturar `desktop.png` e `mobile.png` em `.impeccable/review/`.
+3. Rodar o `impeccable-finish-reviewer` (com o brief, as capturas e a prévia como referência de crítica), corrigir conforme a disposição e rodar o `impeccable-documenter` → `DESIGN.md` + `.impeccable/design.json`.
+4. Rodar `mcp__shadcn__get_audit_checklist` no fim.

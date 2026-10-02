@@ -1,7 +1,7 @@
 # Calendário NutriAcademy — Design
 
 **Data:** 2026-10-01
-**Status:** aguardando revisão
+**Status:** revisado em 2026-10-02 (identidade visual da página atual, seções, imersões); ver §11
 **Abordagem escolhida:** A — Next.js + painel próprio (shadcn) + Supabase + Vercel
 
 ## 1. Contexto e objetivo
@@ -20,9 +20,9 @@ navegável.
 - Qualquer mês anterior com aulas pode ser consultado por navegação e por URL própria.
 - Um aluno consegue salvar uma aula na própria agenda com um clique.
 
-**Fora do escopo (YAGNI):** busca e filtros, link da aula ao vivo, link de gravação, descrição
-da aula, níveis de permissão, notificações por e-mail/WhatsApp, embed no WordPress e área
-logada para alunos.
+**Fora do escopo (YAGNI):** busca e filtros, link da aula ao vivo, link de gravação, níveis de
+permissão, notificações por e-mail/WhatsApp, embed no WordPress e área logada para alunos.
+(A descrição da aula entrou no escopo na revisão de 2026-10-02; ver §11.)
 
 ## 2. Usuários
 
@@ -187,3 +187,105 @@ Os dados de professor são revisados manualmente antes de importar (ex.: o site 
 - Backups diários automáticos do Supabase (plano gratuito).
 - Um guia rápido em uma página para a equipe do cliente: como entrar e como cadastrar,
   duplicar e editar aulas.
+
+
+## 11. Revisão 2026-10-02 — identidade visual, seções e imersões
+
+Esta seção **substitui** as partes conflitantes de §4–§6 e §8. Contexto de produto em `PRODUCT.md`;
+direção visual em `.impeccable/` (surface brief) e na prévia aprovada
+(https://claude.ai/artifact/Pbvo3VrPFiDCHwqaEcRcB7, versão 4).
+
+### 11.1 Identidade visual (vinculante)
+
+A plataforma reproduz a identidade da página atual `escolanutriacademy.com.br/calendario-nutriacademy/`:
+- **Fundo e hero:** fundo preto. Hero com gradiente `#9C8860 → #000`, caixa com borda `#998858` e
+  raio 15px, `BG-01.jpg` a 50% de opacidade, logo claro, título "PROGRAMAÇÃO MÊS DE {MÊS}"
+  (Poppins 400, até 63px, caixa alta) e pílula "ESCOLA NUTRIACADEMY".
+- **Card grande (estilo `destaque`):** vidro `rgba(10,10,10,.43)`, borda `#5E5E5E`, raio 15px.
+  Rótulo cinza 11px com tracking 2.2px. Data dourada `#D8BB68` 19px 700 ("15/09 ÀS 19HS").
+  Título 32px 700 em caixa alta. Descrição opcional. Divisor. Nome do professor dourado 11px.
+  Imagem 456×449 com raio 15px à direita (no celular, fica acima).
+- **Card compacto (estilo `compacto`, NutriAcademy PRO):** fundo `rgba(157,204,204,.06)`.
+  Data e nome em teal `#9DCCCC`. Avatar redondo de 57px. Selo da seção com logo e brilho
+  `#178A8A` acima da grade.
+- **Rodapé:** "Curadoria NutriAcademy · Módulo Certificação · Calendário {Mês}".
+- **Fonte:** Poppins.
+- **Fotos:** sempre sem filtro, inclusive nas aulas realizadas. A aula realizada recebe o selo
+  "Realizada" e a data levemente apagada.
+- **Navegação de meses:** texto dourado, sem borda. Com dois controles, separados por uma
+  barra vertical (`‹ SETEMBRO | NOVEMBRO ›`).
+- **Painel `/admin`:** a mesma identidade (escuro, dourado, Poppins), em modo operacional,
+  construído com shadcn/ui (sidebar, field, calendar + popover, combobox, empty, sonner,
+  alert-dialog, toggle-group).
+
+### 11.2 Modelo de dados (substitui §4)
+
+```sql
+secoes (
+  id uuid pk,
+  nome text not null unique,             -- "NutriOnfire", "NutriLabs", "NutriAcademy PRO", "Curadoria", "Certificação"
+  estilo text not null check (estilo in ('destaque','compacto')),
+  acento text not null default 'ouro' check (acento in ('ouro','teal')),
+  ordem int not null default 0,          -- ordem na página
+  logo_path text                         -- opcional (ex.: logo PRO acima dos cards compactos)
+)
+
+imersoes (                               -- evento estratégico pontual com aulas numeradas
+  id uuid pk,
+  nome text not null,                    -- interno no painel; exibição pública opcional
+  exibir_nome boolean not null default false,
+  secao_id uuid not null references secoes on delete restrict,  -- posição na página (logo após a seção)
+  created_at timestamptz default now()
+)
+
+professores (id, nome, slug unique, foto_path)          -- sem título fixo
+
+aulas (
+  id uuid pk,
+  titulo text not null,
+  descricao text,                        -- opcional
+  inicio timestamptz not null,
+  duracao_min int not null default 60,
+  professor_id uuid not null references professores on delete restrict,
+  nome_exibicao text,                    -- como o nome aparece NESTA aula ("Dra. Samira Lima"); vazio = nome do professor
+  secao_id uuid not null references secoes on delete restrict,
+  imersao_id uuid references imersoes on delete restrict,
+  numero_na_imersao int,                 -- obrigatório quando imersao_id existe ("AULA 01")
+  imagem_path text,                      -- opcional; vazio = foto do professor
+  created_at, updated_at
+)
+```
+- O **título do professor é definido por aula** (`nome_exibicao`). Ao cadastrar, o painel sugere
+  o último `nome_exibicao` usado para aquele professor. Nada é inferido.
+- A aula de uma imersão herda a seção da imersão (validado na action).
+- RLS igual a §4: leitura pública e escrita só para a `equipe`.
+
+### 11.3 Página pública (substitui o layout de §5; comportamentos de §5 continuam)
+
+Ordem de renderização do mês:
+1. Para cada seção, por `ordem`: as aulas avulsas da seção, por data.
+2. Logo depois, as imersões dessa seção, cada uma numa moldura com borda dourada, com as aulas
+   ordenadas por `numero_na_imersao`.
+3. Seções `destaque` mostram cards grandes. Seções `compacto` mostram o selo/logo da seção e uma
+   grade de cards compactos.
+
+Em aulas de imersão, o rótulo do card é "AULA 0N" no lugar do nome da seção. O card usa
+`imagem_path ?? professor.foto_path`. A página do professor mantém a mesma identidade.
+
+### 11.4 Painel (acrescenta a §6)
+
+- CRUD de **Seções** (nome, estilo, acento, ordem, logo) e de **Imersões** (nome, seção, exibir
+  nome). No formulário da imersão, o botão "Adicionar aula" já preenche o próximo número.
+- O formulário de aula ganha: descrição, "Como o nome aparece" (sugerido), seção, imersão +
+  número e imagem do card (upload opcional).
+- **Duplicar**, numa aula de imersão, incrementa o número.
+- Foto do professor e imagem da aula: até 900×900, WebP, sem filtro.
+
+### 11.5 Carga inicial (substitui §8)
+
+O seed importa setembro e outubro/2026 exatamente como publicados:
+- seções NutriOnfire, NutriLabs, PRO, Curadoria e Certificação;
+- a imersão de outubro da Samira Lima (5 aulas com descrição e imagem própria `Samira-Lima2-1.jpg`);
+- `nome_exibicao` copiado do texto de cada card do site.
+
+A grafia "Respitatórios" é corrigida para "Respiratórios".
